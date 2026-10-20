@@ -9,6 +9,9 @@ import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi } from 'vitest';
 import { maskPhoneNumber } from '@shared/maskPhoneNumber.js';
 import MaskedPhone from '@shared/MaskedPhone.jsx';
+import { revealAdminFields } from '@/lib/adminApi';
+import { http, HttpResponse } from 'msw';
+import { server } from '../mocks/server';
 
 const PHONE = '+2348012344219';
 const MASKED = '+234 ••• ••• 4219';
@@ -89,6 +92,25 @@ describe('MaskedPhone', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/could not reveal number/i);
     expect(screen.getByText(MASKED)).toBeInTheDocument();
     expect(screen.queryByText(PHONE)).not.toBeInTheDocument();
+  });
+
+  it('sends the reveal request for the record that was clicked', async () => {
+    const user = userEvent.setup();
+    const requested = vi.fn();
+    server.use(
+      http.post('*/api/admin/reveal/:resource/:id', ({ params }) => {
+        requested(`${params.resource}/${params.id}`);
+        return HttpResponse.json({ success: true, data: { fields: { phoneNumber: PHONE } } });
+      })
+    );
+    render(
+      <MaskedPhone phone={PHONE} onReveal={() => revealAdminFields('user', 'u-42')} />
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Reveal phone number' }));
+
+    expect(await screen.findByText(PHONE)).toBeInTheDocument();
+    expect(requested).toHaveBeenCalledWith('user/u-42');
   });
 
   it('renders a dash when there is no phone number', () => {
